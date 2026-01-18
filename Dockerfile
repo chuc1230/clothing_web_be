@@ -5,13 +5,13 @@ FROM node:20
 WORKDIR /app/back_end
 
 # sao chep file package*.json 
-COPY back_end/package*.json ./
+COPY package*.json ./
 
 # cai dat cac dependencies 
 RUN npm install
 
 # sao chep toan bo source code vao container
-COPY back_end ./
+COPY . .
 
 # thiet lap port cho container
 EXPOSE 4000
