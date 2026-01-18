@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Upload Image</title>
+</head>
+
+<body>
+    <h2>Upload Image</h2>
+    <form id="uploadForm" enctype="multipart/form-data">
+        <input type="file" name="product" accept="image/*" multiple required />
+        <button type="submit">Upload</button>
+    </form>
+    <p id="responseMessage"></p>
+
+    <script>
+
+        document.addEventListener("DOMContentLoaded", function () {
+            document.getElementById('uploadForm').onsubmit = async function (e) {
+                e.preventDefault(); // Ngăn trang web làm mới khi submit form
+                const formData = new FormData();
+                const fileInput = document.querySelector('input[name="product"]');
+
+                for (let i = 0; i < fileInput.files.length; i++) {
+                    formData.append('product', fileInput.files[i]);
+                }
+
+                try {
+                    const response = await fetch('http://localhost:4000/upload', {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    const responseMessage = document.getElementById('responseMessage');
+                    responseMessage.innerHTML = ""; // Clear any previous messages
+
+                    if (response.ok) {
+                        const result = await response.json();
+                        console.log(result); // Debug response từ server
+
+                        if (result.success) {
+                            responseMessage.innerHTML = "Upload successful!";
+                            result.image_urls.forEach(url => {
+                                const link = document.createElement('a');
+                                link.href = url;
+                                link.target = "_blank";
+                                link.innerText = "View Image";
+                                link.style.display = "block";
+                                responseMessage.appendChild(link);
+
+                                const image = document.createElement('img');
+                                image.src = url;
+                                image.alt = "Uploaded Image";
+                                image.style.maxWidth = "300px";
+                                responseMessage.appendChild(image);
+                            });
+                        } else {
+                            responseMessage.innerText = 'Upload failed!';
+                        }
+                    } else {
+                        console.error("Error uploading image:", response.status);
+                        responseMessage.innerText = 'Upload failed due to server error!';
+                    }
+                } catch (error) {
+                    console.error('Error uploading image:', error);
+                    document.getElementById('responseMessage').innerText = 'Upload failed!';
+                }
+            };
+        });
+
+    </script>
+</body>
+
+</html>
