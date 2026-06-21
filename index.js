@@ -5,7 +5,8 @@ const cors = require("cors");
 const path = require("path");
 const connectDB = require("./config/db");
 const cloudinary = require("cloudinary").v2;
-
+const morgan = require("morgan"); // Thêm thư viện morgan
+const logger = require("./utils/logger"); // Import cấu hình logger bạn đã tạo
 // Configs
 const port = 4000;
 connectDB();
@@ -19,16 +20,34 @@ cloudinary.config({
 // Middleware
 app.use(express.json());
 app.use(cors());
+
+// Custom debug_log middleware
+app.use((req, res, next) => {
+    const time = new Date().toLocaleString("vi-VN");
+    const method = req.method;
+    const url = req.originalUrl;
+    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+
+    res.on('finish', () => {
+        const status = res.statusCode;
+        console.log(`[${time}] - [${method}: ${url}] - [Status: ${status}] - [IP: ${ip}]`);
+    });
+    next();
+});
+
 app.use('/images', express.static(path.join(__dirname, 'upload/images')));
 
 // Routes
 const productRoutes = require("./routes/productRoutes");
 const userRoutes = require("./routes/userRoutes");
 const uploadRoutes = require("./routes/uploadRoutes");
+const orderRoutes = require("./routes/orderRoutes");
 
 app.use(productRoutes); 
 app.use(userRoutes);
 app.use(uploadRoutes);
+app.use("/api/order", orderRoutes);
+
 
 // Health Check
 app.get("/", (req, res) => {

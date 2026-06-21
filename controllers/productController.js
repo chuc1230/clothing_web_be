@@ -1,11 +1,11 @@
 const Product = require("../models/Product");
 const cloudinary = require("cloudinary").v2;
-
+const logger = require('../utils/logger');
 // Add single product
 exports.addProduct = async (req, res) => {
     try {
-        let products = await Product.find({});
-        let id = products.length > 0 ? products[products.length - 1].id + 1 : 1;
+        let last_product_arr = await Product.find({}).sort({ id: -1 }).limit(1);
+        let id = last_product_arr.length > 0 ? (last_product_arr[0].id || 0) + 1 : 1;
 
         let imageUrl = "";
         if (req.file) {
@@ -16,12 +16,12 @@ exports.addProduct = async (req, res) => {
         const product = new Product({
             id: id,
             name: req.body.name || "Unknown Product",
-            image: imageUrl,
+            image: imageUrl || "",
+            images: imageUrl ? [imageUrl] : [],
             category: req.body.category || "others",
             new_price: req.body.new_price || 0,
             old_price: req.body.old_price || 0,
         });
-
         await product.save();
         console.log("Product saved:", product);
         res.json({ success: true, name: req.body.name });
@@ -51,11 +51,11 @@ exports.removeProduct = async (req, res) => {
     res.json({ success: true, name: req.body.name });
 };
 
-// Get all products (Filtered > 10000)
+// Get all products
 exports.getAllProducts = async (req, res) => {
     try {
-        let products = await Product.find({ new_price: { $gt: 10000 } });
-        console.log("Filtered products fetched");
+        let products = await Product.find({});
+        console.log("All products fetched");
         res.send(products);
     } catch (error) {
         res.status(500).json({ success: false, message: "Failed", error: error.message });
@@ -64,16 +64,24 @@ exports.getAllProducts = async (req, res) => {
 
 // Get new collection
 exports.getNewCollection = async (req, res) => {
-    let products = await Product.find({ new_price: { $gt: 10000 } });
-    let newcollection = products.slice(1).slice(-8);
-    console.log("NewCollection Fetched");
-    res.send(newcollection);
+    try {
+        let products = await Product.find({});
+        let newcollection = products.slice(1).slice(-8);
+        console.log("NewCollection Fetched");
+        res.send(newcollection);
+    } catch (error) {
+        res.status(500).json({ success: false, message: "Failed to fetch new collection" });
+    }
 };
 
 // Get popular in women
 exports.getPopularInWomen = async (req, res) => {
-    let products = await Product.find({ category: "women", new_price: { $gt: 10000 } });
-    let popular_in_women = products.slice(0, 4);
-    console.log("Popular in women fetched");
-    res.send(popular_in_women);
+    try {
+        let products = await Product.find({ category: "women" });
+        let popular_in_women = products.slice(0, 4);
+        console.log("Popular in women fetched");
+        res.send(popular_in_women);
+    } catch (error) {
+        res.status(500).json({ success: false, message: "Failed to fetch popular in women" });
+    }
 };

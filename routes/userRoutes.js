@@ -7,6 +7,10 @@ const fetchUser = require("../middleware/auth");
 router.post('/signup', userController.signup);
 router.post('/login', userController.login);
 
+// Profile
+router.get('/api/users/profile', fetchUser, userController.getUserProfile);
+router.put('/api/users/profile', fetchUser, userController.updateUserProfile);
+
 // Cart
 router.post('/addtocart', fetchUser, userController.addToCart);
 router.post('/removefromcart', fetchUser, userController.removeFromCart);
@@ -16,6 +20,7 @@ router.post('/getcart', fetchUser, userController.getCart);
 // User Management
 router.get('/getUsers', userController.getAllUsers);
 router.delete('/removeuser', userController.removeUser);
+router.put('/api/users/:id/role', fetchUser, fetchUser.isSuperAdmin, userController.updateUserRole);
 
 // Orders
 router.post('/addOrder', fetchUser, userController.addOrder);

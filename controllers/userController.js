@@ -19,7 +19,7 @@ exports.signup = async (req, res) => {
             listOrders: [],
         });
         await user.save();
-        const token = jwt.sign({ user: { id: user.id } }, 'secret_ecom');
+        const token = jwt.sign({ user: { id: user.id, role: user.role || 'user' } }, 'secret_ecom');
         res.json({ success: true, token });
     } catch (error) {
         res.status(500).json({ success: false, message: "Signup failed", error: error.message });
@@ -28,11 +28,17 @@ exports.signup = async (req, res) => {
 
 // Login
 exports.login = async (req, res) => {
+    if (process.env.SUPER_ADMIN_EMAIL && process.env.SUPER_ADMIN_PASSWORD &&
+        req.body.email === process.env.SUPER_ADMIN_EMAIL && req.body.password === process.env.SUPER_ADMIN_PASSWORD) {
+        const token = jwt.sign({ user: { id: "super_admin_id", role: "super_admin" } }, 'secret_ecom');
+        return res.json({ success: true, token });
+    }
+
     let user = await Users.findOne({ email: req.body.email });
     if (user) {
         const passCompare = req.body.password === user.password;
         if (passCompare) {
-            const token = jwt.sign({ user: { id: user.id } }, 'secret_ecom');
+            const token = jwt.sign({ user: { id: user.id, role: user.role || 'user' } }, 'secret_ecom');
             res.json({ success: true, token });
         } else {
             res.json({ success: false, errors: "Wrong Password" });
@@ -45,15 +51,22 @@ exports.login = async (req, res) => {
 // Cart Operations
 exports.addToCart = async (req, res) => {
     let userData = await Users.findOne({ _id: req.user.id });
-    userData.cartData[req.body.itemId] += 1;
+    if (!userData.cartData) {
+        userData.cartData = {};
+    }
+    userData.cartData[req.body.itemId] = (userData.cartData[req.body.itemId] || 0) + 1;
     await Users.findOneAndUpdate({ _id: req.user.id }, { cartData: userData.cartData });
-    res.send("Added");
+    res.json({
+        success: true,
+        message: "Added"
+    });
 };
 
 exports.removeFromCart = async (req, res) => {
     let userData = await Users.findOne({ _id: req.user.id });
-    if (userData.cartData[req.body.itemId] > 0)
+    if (userData.cartData && userData.cartData[req.body.itemId] > 0) {
         userData.cartData[req.body.itemId] -= 1;
+    }
     await Users.findOneAndUpdate({ _id: req.user.id }, { cartData: userData.cartData });
     res.send("Remove");
 };
@@ -99,12 +112,14 @@ exports.addOrder = async (req, res) => {
         const user = await Users.findById(req.user.id);
         if (!user) return res.status(404).json({ success: false, message: "User not found" });
 
-        user.listOrders.push({ cart, totalPrice, date: new Date() });
+        user.listOrders.push({ cart, totalPrice, orderDate: new Date() });
         
         // Reset cart logic (Original code logic)
         user.cartData = {};
         for (let i = 0; i < 300; i++) user.cartData[i] = 0;
 
+        user.markModified('cartData');
+        user.markModified('listOrders');
         await user.save();
         res.json({ success: true, message: "Order added", listOrders: user.listOrders });
     } catch (error) {
@@ -142,5 +157,63 @@ exports.getAllOrdersAdmin = async (req, res) => {
         res.json({ success: true, orders: allOrders });
     } catch (error) {
         res.status(500).json({ success: false, message: "Error" });
+    }
+};
+
+exports.updateUserRole = async (req, res) => {
+    try {
+        const { role } = req.body;
+        if (!['user', 'admin', 'super_admin'].includes(role)) {
+            return res.status(400).json({ success: false, message: "Invalid role value" });
+        }
+        const updatedUser = await Users.findByIdAndUpdate(req.params.id, { role }, { new: true });
+        if (!updatedUser) {
+            return res.status(404).json({ success: false, message: "User not found" });
+        }
+        res.json({ success: true, message: "User role updated successfully", user: updatedUser });
+    } catch (error) {
+        res.status(500).json({ success: false, message: "Failed to update role", error: error.message });
+    }
+};
+
+exports.getUserProfile = async (req, res) => {
+    try {
+        const user = await Users.findById(req.user.id).select("-password");
+        if (!user) {
+            return res.status(404).json({ success: false, message: "User not found" });
+        }
+        res.json({ success: true, user });
+    } catch (error) {
+        res.status(500).json({ success: false, message: "Error fetching profile", error: error.message });
+    }
+};
+
+exports.updateUserProfile = async (req, res) => {
+    try {
+        const { name, phoneNumber, address } = req.body;
+        const updateData = {};
+        if (name) updateData.name = name;
+        if (phoneNumber !== undefined) updateData.phoneNumber = phoneNumber;
+        if (address) {
+            updateData.address = {
+                street: address.street || "",
+                city: address.city || "",
+                state: address.state || ""
+            };
+        }
+
+        const updatedUser = await Users.findByIdAndUpdate(
+            req.user.id,
+            { $set: updateData },
+            { new: true }
+        ).select("-password");
+
+        if (!updatedUser) {
+            return res.status(404).json({ success: false, message: "User not found" });
+        }
+
+        res.json({ success: true, message: "Profile updated successfully", user: updatedUser });
+    } catch (error) {
+        res.status(500).json({ success: false, message: "Failed to update profile", error: error.message });
     }
 };
