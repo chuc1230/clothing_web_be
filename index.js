@@ -62,3 +62,12 @@ app.listen(port, (error) => {
         console.log("Error:", error);
     }
 });
+
+// Prevent server crashes on unhandled errors
+process.on("uncaughtException", (error) => {
+    console.error("Uncaught Exception at process level:", error);
+});
+
+process.on("unhandledRejection", (reason, promise) => {
+    console.error("Unhandled Promise Rejection at:", promise, "reason:", reason);
+});

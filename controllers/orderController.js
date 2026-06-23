@@ -19,7 +19,7 @@ exports.addOrder = async (req, res) => {
         await newOrder.save();
 
         // Reset giỏ hàng của User về rỗng sau khi đặt hàng thành công
-        await User.findByIdAndUpdate(userId, { cartData: [] });
+        await User.findByIdAndUpdate(userId, { cartData: {} });
 
         res.json({ success: true, message: "Đặt hàng thành công!", order: newOrder });
     } catch (error) {

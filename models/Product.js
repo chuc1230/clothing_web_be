@@ -15,6 +15,14 @@ const ProductSchema = new mongoose.Schema({
     available: { type: Boolean, default: true },
     featured: { type: Boolean, default: false }, // Sản phẩm nổi bật
     date: { type: Date, default: Date.now },
+    reviews: [
+        {
+            name: { type: String, required: true },
+            rating: { type: Number, required: true, min: 1, max: 5 },
+            comment: { type: String, required: true },
+            date: { type: Date, default: Date.now }
+        }
+    ]
 });
 
 module.exports = mongoose.model("Product", ProductSchema);

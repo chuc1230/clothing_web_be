@@ -14,6 +14,7 @@ router.put('/api/users/profile', fetchUser, userController.updateUserProfile);
 // Cart
 router.post('/addtocart', fetchUser, userController.addToCart);
 router.post('/removefromcart', fetchUser, userController.removeFromCart);
+router.post('/deletefromcart', fetchUser, userController.deleteFromCart);
 router.post('/clearcart', fetchUser, userController.clearCart);
 router.post('/getcart', fetchUser, userController.getCart);
 
@@ -26,5 +27,6 @@ router.put('/api/users/:id/role', fetchUser, fetchUser.isSuperAdmin, userControl
 router.post('/addOrder', fetchUser, userController.addOrder);
 router.get('/orderItems', fetchUser, userController.getOrderItems);
 router.get('/admin/allorders', userController.getAllOrdersAdmin);
+router.post('/admin/updateOrderStatus', userController.updateUserOrderStatus);
 
 module.exports = router;

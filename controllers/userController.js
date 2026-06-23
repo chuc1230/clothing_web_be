@@ -9,7 +9,6 @@ exports.signup = async (req, res) => {
             return res.status(400).json({ success: false, errors: "Email already exists" });
         }
         let cart = {};
-        for (let i = 0; i < 300; i++) cart[i] = 0;
 
         const user = new Users({
             name: req.body.username,
@@ -28,56 +27,103 @@ exports.signup = async (req, res) => {
 
 // Login
 exports.login = async (req, res) => {
-    if (process.env.SUPER_ADMIN_EMAIL && process.env.SUPER_ADMIN_PASSWORD &&
-        req.body.email === process.env.SUPER_ADMIN_EMAIL && req.body.password === process.env.SUPER_ADMIN_PASSWORD) {
-        const token = jwt.sign({ user: { id: "super_admin_id", role: "super_admin" } }, 'secret_ecom');
-        return res.json({ success: true, token });
-    }
-
-    let user = await Users.findOne({ email: req.body.email });
-    if (user) {
-        const passCompare = req.body.password === user.password;
-        if (passCompare) {
-            const token = jwt.sign({ user: { id: user.id, role: user.role || 'user' } }, 'secret_ecom');
-            res.json({ success: true, token });
-        } else {
-            res.json({ success: false, errors: "Wrong Password" });
+    try {
+        if (process.env.SUPER_ADMIN_EMAIL && process.env.SUPER_ADMIN_PASSWORD &&
+            req.body.email === process.env.SUPER_ADMIN_EMAIL && req.body.password === process.env.SUPER_ADMIN_PASSWORD) {
+            const token = jwt.sign({ user: { id: "super_admin_id", role: "super_admin" } }, 'secret_ecom');
+            return res.json({ success: true, token });
         }
-    } else {
-        res.json({ success: false, errors: "Wrong Email Id" });
+
+        let user = await Users.findOne({ email: req.body.email });
+        if (user) {
+            const passCompare = req.body.password === user.password;
+            if (passCompare) {
+                const token = jwt.sign({ user: { id: user.id, role: user.role || 'user' } }, 'secret_ecom');
+                res.json({ success: true, token });
+            } else {
+                res.json({ success: false, errors: "Wrong Password" });
+            }
+        } else {
+            res.json({ success: false, errors: "Wrong Email Id" });
+        }
+    } catch (error) {
+        res.status(500).json({ success: false, errors: "Login failed due to server error", error: error.message });
     }
 };
 
 // Cart Operations
 exports.addToCart = async (req, res) => {
-    let userData = await Users.findOne({ _id: req.user.id });
-    if (!userData.cartData) {
-        userData.cartData = {};
+    try {
+        if (req.user.id === "super_admin_id") {
+            return res.status(400).json({ success: false, message: "Super admin cannot have a cart" });
+        }
+        let userData = await Users.findOne({ _id: req.user.id });
+        if (!userData.cartData) {
+            userData.cartData = {};
+        }
+        userData.cartData[req.body.itemId] = (userData.cartData[req.body.itemId] || 0) + 1;
+        await Users.findOneAndUpdate({ _id: req.user.id }, { cartData: userData.cartData });
+        res.json({
+            success: true,
+            message: "Added"
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: "Failed to add to cart", error: error.message });
     }
-    userData.cartData[req.body.itemId] = (userData.cartData[req.body.itemId] || 0) + 1;
-    await Users.findOneAndUpdate({ _id: req.user.id }, { cartData: userData.cartData });
-    res.json({
-        success: true,
-        message: "Added"
-    });
 };
 
 exports.removeFromCart = async (req, res) => {
-    let userData = await Users.findOne({ _id: req.user.id });
-    if (userData.cartData && userData.cartData[req.body.itemId] > 0) {
-        userData.cartData[req.body.itemId] -= 1;
+    try {
+        if (req.user.id === "super_admin_id") {
+            return res.json({ success: true, message: "Super admin has no cart" });
+        }
+        let userData = await Users.findOne({ _id: req.user.id });
+        if (userData.cartData && userData.cartData[req.body.itemId] > 0) {
+            userData.cartData[req.body.itemId] -= 1;
+            if (userData.cartData[req.body.itemId] === 0) {
+                delete userData.cartData[req.body.itemId];
+            }
+        }
+        await Users.findOneAndUpdate({ _id: req.user.id }, { cartData: userData.cartData });
+        res.send("Remove");
+    } catch (error) {
+        res.status(500).json({ success: false, message: "Failed to remove from cart", error: error.message });
     }
-    await Users.findOneAndUpdate({ _id: req.user.id }, { cartData: userData.cartData });
-    res.send("Remove");
+};
+
+exports.deleteFromCart = async (req, res) => {
+    try {
+        if (req.user.id === "super_admin_id") {
+            return res.json({ success: true, message: "Super admin has no cart" });
+        }
+        let userData = await Users.findOne({ _id: req.user.id });
+        if (userData.cartData && userData.cartData[req.body.itemId] !== undefined) {
+            delete userData.cartData[req.body.itemId];
+            await Users.findOneAndUpdate({ _id: req.user.id }, { cartData: userData.cartData });
+        }
+        res.json({ success: true, message: "Deleted from cart" });
+    } catch (error) {
+        res.status(500).json({ success: false, message: "Failed to delete from cart", error: error.message });
+    }
 };
 
 exports.getCart = async (req, res) => {
-    let userData = await Users.findOne({ _id: req.user.id });
-    res.json(userData.cartData);
+    try {
+        if (req.user.id === "super_admin_id") {
+            return res.json({});
+        }
+        let userData = await Users.findOne({ _id: req.user.id });
+        res.json(userData ? userData.cartData : {});
+    } catch (error) {
+        res.status(500).json({ success: false, message: "Failed to get cart", error: error.message });
+    }
 };
 
 exports.clearCart = async (req, res) => {
     try {
+        if (req.user.id === "super_admin_id") {
+            return res.json({ message: "Cart cleared successfully" });
+        }
         await Users.findOneAndUpdate({ _id: req.user.id }, { cartData: {} }); // Lưu ý: Logic gốc set {} nhưng signup set loop 300. Cần đồng bộ logic này sau.
         res.json({ message: "Cart cleared successfully" });
     } catch (error) {
@@ -108,17 +154,24 @@ exports.removeUser = async (req, res) => {
 // Order Management
 exports.addOrder = async (req, res) => {
     try {
-        const { cart, totalPrice } = req.body;
+        if (req.user.id === "super_admin_id") {
+            return res.status(400).json({ success: false, message: "Super admin cannot place orders" });
+        }
+        const { cart, totalPrice, phoneNumber, address, paymentMethod } = req.body;
         const user = await Users.findById(req.user.id);
         if (!user) return res.status(404).json({ success: false, message: "User not found" });
 
-        user.listOrders.push({ cart, totalPrice, orderDate: new Date() });
+        user.listOrders.push({ 
+            cart, 
+            totalPrice, 
+            orderDate: new Date(),
+            status: "Chờ shop đóng hàng",
+            phoneNumber: phoneNumber || user.phoneNumber || "",
+            address: address || user.address || {},
+            paymentMethod: paymentMethod || "Tiền mặt"
+        });
         
-        // Reset cart logic (Original code logic)
-        user.cartData = {};
-        for (let i = 0; i < 300; i++) user.cartData[i] = 0;
-
-        user.markModified('cartData');
+        // Do not clear cartData on purchase as per new request
         user.markModified('listOrders');
         await user.save();
         res.json({ success: true, message: "Order added", listOrders: user.listOrders });
@@ -129,8 +182,11 @@ exports.addOrder = async (req, res) => {
 
 exports.getOrderItems = async (req, res) => {
     try {
+        if (req.user.id === "super_admin_id") {
+            return res.json({ success: true, orderItems: [] });
+        }
         const user = await Users.findById(req.user.id);
-        res.json({ success: true, orderItems: user.listOrders });
+        res.json({ success: true, orderItems: (user && user.listOrders) ? user.listOrders : [] });
     } catch (error) {
         res.status(500).json({ success: false, message: "Error" });
     }
@@ -141,7 +197,7 @@ exports.getAllOrdersAdmin = async (req, res) => {
         const users = await Users.find({});
         const allOrders = [];
         users.forEach(user => {
-            user.listOrders.forEach(order => {
+            (user.listOrders || []).forEach(order => {
                 if (new Date(order.orderDate) > new Date("2025-01-01")) {
                     allOrders.push({
                         userId: user._id,
@@ -150,6 +206,10 @@ exports.getAllOrdersAdmin = async (req, res) => {
                         orderDate: order.orderDate,
                         totalPrice: order.totalPrice,
                         cart: order.cart,
+                        phoneNumber: order.phoneNumber || user.phoneNumber || "",
+                        address: order.address || user.address || {},
+                        status: order.status || "Chờ shop đóng hàng",
+                        paymentMethod: order.paymentMethod || "Tiền mặt"
                     });
                 }
             });
@@ -157,6 +217,28 @@ exports.getAllOrdersAdmin = async (req, res) => {
         res.json({ success: true, orders: allOrders });
     } catch (error) {
         res.status(500).json({ success: false, message: "Error" });
+    }
+};
+
+exports.updateUserOrderStatus = async (req, res) => {
+    try {
+        const { userId, orderDate, status } = req.body;
+        const user = await Users.findById(userId);
+        if (!user) return res.status(404).json({ success: false, message: "User not found" });
+
+        const order = user.listOrders.find(
+            (o) => new Date(o.orderDate).getTime() === new Date(orderDate).getTime()
+        );
+        if (order) {
+            order.status = status;
+            user.markModified('listOrders');
+            await user.save();
+            res.json({ success: true, message: "Trạng thái đơn hàng đã được cập nhật!", order });
+        } else {
+            res.status(404).json({ success: false, message: "Không tìm thấy đơn hàng" });
+        }
+    } catch (error) {
+        res.status(500).json({ success: false, message: "Lỗi cập nhật trạng thái đơn hàng", error: error.message });
     }
 };
 
@@ -178,6 +260,18 @@ exports.updateUserRole = async (req, res) => {
 
 exports.getUserProfile = async (req, res) => {
     try {
+        if (req.user.id === "super_admin_id") {
+            return res.json({
+                success: true,
+                user: {
+                    name: "Super Admin",
+                    email: process.env.SUPER_ADMIN_EMAIL || "abc123@example.com",
+                    role: "super_admin",
+                    phoneNumber: "",
+                    address: { street: "", city: "", state: "" }
+                }
+            });
+        }
         const user = await Users.findById(req.user.id).select("-password");
         if (!user) {
             return res.status(404).json({ success: false, message: "User not found" });

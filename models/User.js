@@ -17,7 +17,11 @@ const UserSchema = new mongoose.Schema({
         {
             cart: { type: Object },
             totalPrice: { type: Number },
-            orderDate: { type: Date, default: Date.now }
+            orderDate: { type: Date, default: Date.now },
+            status: { type: String, default: "Chờ shop đóng hàng" },
+            phoneNumber: { type: String },
+            address: { type: Object },
+            paymentMethod: { type: String, default: "Tiền mặt" }
         }
     ],
     date: { type: Date, default: Date.now },

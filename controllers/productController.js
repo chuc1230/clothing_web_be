@@ -8,16 +8,25 @@ exports.addProduct = async (req, res) => {
         let id = last_product_arr.length > 0 ? (last_product_arr[0].id || 0) + 1 : 1;
 
         let imageUrl = "";
-        if (req.file) {
-            const result = await cloudinary.uploader.upload(req.file.path);
+        if (req.files && req.files['product'] && req.files['product'][0]) {
+            const result = await cloudinary.uploader.upload(req.files['product'][0].path);
             imageUrl = result.secure_url;
+        }
+
+        let imagesUrls = [];
+        if (req.files && req.files['images']) {
+            for (const file of req.files['images']) {
+                const result = await cloudinary.uploader.upload(file.path);
+                imagesUrls.push(result.secure_url);
+            }
         }
 
         const product = new Product({
             id: id,
             name: req.body.name || "Unknown Product",
+            description: req.body.description || "",
             image: imageUrl || "",
-            images: imageUrl ? [imageUrl] : [],
+            images: imagesUrls,
             category: req.body.category || "others",
             new_price: req.body.new_price || 0,
             old_price: req.body.old_price || 0,
@@ -83,5 +92,28 @@ exports.getPopularInWomen = async (req, res) => {
         res.send(popular_in_women);
     } catch (error) {
         res.status(500).json({ success: false, message: "Failed to fetch popular in women" });
+    }
+};
+
+// Add product review
+exports.addProductReview = async (req, res) => {
+    try {
+        const { name, rating, comment } = req.body;
+        if (!name || !rating || !comment) {
+            return res.status(400).json({ success: false, message: "Missing review information" });
+        }
+        
+        const product = await Product.findOne({ id: Number(req.params.id) });
+        if (!product) {
+            return res.status(404).json({ success: false, message: "Product not found" });
+        }
+        
+        product.reviews.push({ name, rating: Number(rating), comment });
+        await product.save();
+        
+        console.log(`Review added for product ${product.id}`);
+        res.json({ success: true, reviews: product.reviews });
+    } catch (error) {
+        res.status(500).json({ success: false, message: "Failed to add review", error: error.message });
     }
 };
