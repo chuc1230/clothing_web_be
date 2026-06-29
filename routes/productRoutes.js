@@ -8,6 +8,11 @@ router.post('/addproduct', upload.fields([
     { name: 'images', maxCount: 10 }
 ]), productController.addProduct);
 
+router.post('/updateproduct', upload.fields([
+    { name: 'product', maxCount: 1 },
+    { name: 'images', maxCount: 10 }
+]), productController.updateProduct);
+
 router.post('/addAllProduct', productController.addAllProduct);
 router.post('/removeproduct', productController.removeProduct);
 router.get('/allproducts', productController.getAllProducts);

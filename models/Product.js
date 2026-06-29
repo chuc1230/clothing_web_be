@@ -7,7 +7,15 @@ const ProductSchema = new mongoose.Schema({
     image: { type: String, required: true }, // Ảnh đại diện chính (frontend dùng thuộc tính này)
     images: [{ type: String }], // Mảng chứa nhiều ảnh (ảnh chính, ảnh chi tiết)
     category: { type: String, required: true, index: true }, 
-    sizes: [{ type: String }], // Ví dụ: ["S", "M", "L", "XL"]
+    subcategory: { type: String, default: "" }, 
+    detail_category: { type: String, default: "" }, 
+    sizes: [
+        {
+            size: { type: String, required: true },
+            new_price: { type: Number, required: true, min: 0 },
+            old_price: { type: Number, required: true, min: 0 }
+        }
+    ],
     colors: [{ type: String }], // Ví dụ: ["Red", "Black"]
     new_price: { type: Number, required: true, min: 0 },
     old_price: { type: Number, required: true, min: 0 },
@@ -19,7 +27,7 @@ const ProductSchema = new mongoose.Schema({
         {
             name: { type: String, required: true },
             rating: { type: Number, required: true, min: 1, max: 5 },
-            comment: { type: String, required: true },
+            comment: { type: String, default: "" },
             date: { type: Date, default: Date.now }
         }
     ]
