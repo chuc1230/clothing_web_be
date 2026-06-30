@@ -158,6 +158,18 @@ exports.addOrder = async (req, res) => {
             return res.status(400).json({ success: false, message: "Super admin cannot place orders" });
         }
         const { cart, totalPrice, phoneNumber, address, paymentMethod } = req.body;
+
+        // Bắt buộc nhập số điện thoại và địa chỉ giao hàng cho đơn hàng mới
+        if (!phoneNumber || typeof phoneNumber !== 'string' || !phoneNumber.trim()) {
+            return res.status(400).json({ success: false, message: "Số điện thoại nhận hàng là bắt buộc" });
+        }
+        if (!address || typeof address !== 'object' || 
+            !address.street || typeof address.street !== 'string' || !address.street.trim() || 
+            !address.city || typeof address.city !== 'string' || !address.city.trim() || 
+            !address.state || typeof address.state !== 'string' || !address.state.trim()) {
+            return res.status(400).json({ success: false, message: "Địa chỉ giao hàng đầy đủ (số nhà/đường, quận/huyện, tỉnh/thành phố) là bắt buộc" });
+        }
+
         const user = await Users.findById(req.user.id);
         if (!user) return res.status(404).json({ success: false, message: "User not found" });
 
@@ -309,5 +321,34 @@ exports.updateUserProfile = async (req, res) => {
         res.json({ success: true, message: "Profile updated successfully", user: updatedUser });
     } catch (error) {
         res.status(500).json({ success: false, message: "Failed to update profile", error: error.message });
+    }
+};
+
+exports.cancelOrder = async (req, res) => {
+    try {
+        const { orderDate } = req.body;
+        if (!orderDate) {
+            return res.status(400).json({ success: false, message: "Missing order date" });
+        }
+        const user = await Users.findById(req.user.id);
+        if (!user) return res.status(404).json({ success: false, message: "User not found" });
+
+        const order = user.listOrders.find(
+            (o) => new Date(o.orderDate).getTime() === new Date(orderDate).getTime()
+        );
+        if (!order) {
+            return res.status(404).json({ success: false, message: "Không tìm thấy đơn hàng" });
+        }
+
+        if (order.status !== "Chờ shop đóng hàng") {
+            return res.status(400).json({ success: false, message: "Chỉ có thể hủy đơn hàng ở trạng thái 'Chờ shop đóng hàng'" });
+        }
+
+        order.status = "Đã hủy";
+        user.markModified('listOrders');
+        await user.save();
+        res.json({ success: true, message: "Đơn hàng đã được hủy thành công!", order });
+    } catch (error) {
+        res.status(500).json({ success: false, message: "Lỗi hủy đơn hàng", error: error.message });
     }
 };

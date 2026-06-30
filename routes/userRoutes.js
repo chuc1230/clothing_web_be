@@ -25,6 +25,7 @@ router.put('/api/users/:id/role', fetchUser, fetchUser.isSuperAdmin, userControl
 
 // Orders
 router.post('/addOrder', fetchUser, userController.addOrder);
+router.post('/cancelOrder', fetchUser, userController.cancelOrder);
 router.get('/orderItems', fetchUser, userController.getOrderItems);
 router.get('/admin/allorders', userController.getAllOrdersAdmin);
 router.post('/admin/updateOrderStatus', userController.updateUserOrderStatus);
