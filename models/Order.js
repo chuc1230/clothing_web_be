@@ -16,8 +16,8 @@ const OrderSchema = new mongoose.Schema({
     paymentMethod: { type: String, default: "COD" }, // COD, Stripe, PayPal...
     status: { 
         type: String, 
-        enum: ["Pending", "Processing", "Shipped", "Delivered", "Cancelled"], 
-        default: "Pending" 
+        enum: ["Pending", "Processing", "Shipped", "Delivered", "Cancelled", "Chờ shop đóng hàng", "Đang ship", "Đã thanh toán", "Đã hủy"], 
+        default: "Chờ shop đóng hàng" 
     },
     orderDate: { type: Date, default: Date.now },
 });

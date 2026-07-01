@@ -1,19 +1,34 @@
 const Users = require("../models/User");
 const jwt = require("jsonwebtoken");
+const Order = require("../models/Order");
+const Product = require("../models/Product");
 
 // Signup
 exports.signup = async (req, res) => {
     try {
-        let check = await Users.findOne({ email: req.body.email });
+        const { username, email, password } = req.body;
+        
+        // Validate email format
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!email || !emailRegex.test(email)) {
+            return res.status(400).json({ success: false, errors: "Định dạng email không hợp lệ" });
+        }
+
+        // Validate password length
+        if (!password || password.length < 6) {
+            return res.status(400).json({ success: false, errors: "Mật khẩu phải dài ít nhất 6 ký tự" });
+        }
+
+        let check = await Users.findOne({ email });
         if (check) {
             return res.status(400).json({ success: false, errors: "Email already exists" });
         }
         let cart = {};
 
         const user = new Users({
-            name: req.body.username,
-            email: req.body.email,
-            password: req.body.password,
+            name: username,
+            email: email,
+            password: password,
             cartData: cart,
             listOrders: [],
         });
@@ -173,10 +188,11 @@ exports.addOrder = async (req, res) => {
         const user = await Users.findById(req.user.id);
         if (!user) return res.status(404).json({ success: false, message: "User not found" });
 
+        const orderDate = new Date();
         user.listOrders.push({ 
             cart, 
             totalPrice, 
-            orderDate: new Date(),
+            orderDate: orderDate,
             status: "Chờ shop đóng hàng",
             phoneNumber: phoneNumber || user.phoneNumber || "",
             address: address || user.address || {},
@@ -186,6 +202,35 @@ exports.addOrder = async (req, res) => {
         // Do not clear cartData on purchase as per new request
         user.markModified('listOrders');
         await user.save();
+
+        // Save order to Order collection/table
+        const items = [];
+        for (const [productId, quantity] of Object.entries(cart || {})) {
+            const product = await Product.findOne({ id: Number(productId) });
+            if (product) {
+                items.push({
+                    productId: product._id,
+                    name: product.name,
+                    price: product.new_price,
+                    quantity: quantity
+                });
+            }
+        }
+
+        const newOrder = new Order({
+            userId: req.user.id,
+            items,
+            totalPrice,
+            shippingAddress: {
+                ...address,
+                phoneNumber: phoneNumber || user.phoneNumber || ""
+            },
+            paymentMethod: paymentMethod || "Tiền mặt",
+            status: "Chờ shop đóng hàng",
+            orderDate: orderDate
+        });
+        await newOrder.save();
+
         res.json({ success: true, message: "Order added", listOrders: user.listOrders });
     } catch (error) {
         res.status(500).json({ success: false, message: "Failed", error: error.message });
@@ -245,6 +290,13 @@ exports.updateUserOrderStatus = async (req, res) => {
             order.status = status;
             user.markModified('listOrders');
             await user.save();
+
+            // Also update in Order collection
+            await Order.findOneAndUpdate(
+                { userId: userId, orderDate: new Date(orderDate) },
+                { status }
+            );
+
             res.json({ success: true, message: "Trạng thái đơn hàng đã được cập nhật!", order });
         } else {
             res.status(404).json({ success: false, message: "Không tìm thấy đơn hàng" });
@@ -347,6 +399,13 @@ exports.cancelOrder = async (req, res) => {
         order.status = "Đã hủy";
         user.markModified('listOrders');
         await user.save();
+
+        // Also update in Order collection
+        await Order.findOneAndUpdate(
+            { userId: req.user.id, orderDate: new Date(orderDate) },
+            { status: "Đã hủy" }
+        );
+
         res.json({ success: true, message: "Đơn hàng đã được hủy thành công!", order });
     } catch (error) {
         res.status(500).json({ success: false, message: "Lỗi hủy đơn hàng", error: error.message });

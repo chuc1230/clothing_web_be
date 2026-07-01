@@ -30,6 +30,24 @@ exports.addProduct = async (req, res) => {
             }
         }
 
+        const new_price = req.body.new_price !== undefined ? Number(req.body.new_price) : (sizes.length > 0 ? Number(sizes[0].new_price) : 0);
+        const old_price = req.body.old_price !== undefined ? Number(req.body.old_price) : (sizes.length > 0 ? Number(sizes[0].old_price) : 0);
+        const stock = req.body.stock !== undefined ? Number(req.body.stock) : 0;
+
+        if (new_price < 0 || old_price < 0) {
+            return res.status(400).json({ success: false, message: "Giá sản phẩm không hợp lệ (không được nhỏ hơn 0)" });
+        }
+
+        for (const s of sizes) {
+            if (Number(s.new_price) < 0 || Number(s.old_price) < 0) {
+                return res.status(400).json({ success: false, message: "Giá kích thước sản phẩm không hợp lệ" });
+            }
+        }
+
+        if (stock < 0) {
+            return res.status(400).json({ success: false, message: "Số lượng tồn kho không được âm" });
+        }
+
         const product = new Product({
             id: id,
             name: req.body.name || "Unknown Product",
@@ -39,9 +57,10 @@ exports.addProduct = async (req, res) => {
             category: req.body.category || "others",
             subcategory: req.body.subcategory || "",
             detail_category: req.body.detail_category || "",
-            new_price: req.body.new_price || (sizes.length > 0 ? sizes[0].new_price : 0),
-            old_price: req.body.old_price || (sizes.length > 0 ? sizes[0].old_price : 0),
+            new_price: new_price,
+            old_price: old_price,
             sizes: sizes,
+            stock: stock,
         });
         await product.save();
         console.log("Product saved:", product);
@@ -133,7 +152,7 @@ exports.addProductReview = async (req, res) => {
 // Update product
 exports.updateProduct = async (req, res) => {
     try {
-        const { id, name, description, category, subcategory, detail_category, new_price, old_price, sizes } = req.body;
+        const { id, name, description, category, subcategory, detail_category, new_price, old_price, sizes, stock } = req.body;
         
         const product = await Product.findOne({ id: Number(id) });
         if (!product) {
@@ -166,6 +185,29 @@ exports.updateProduct = async (req, res) => {
             }
         }
 
+        if (new_price !== undefined && Number(new_price) < 0) {
+            return res.status(400).json({ success: false, message: "Giá sản phẩm không hợp lệ (không được nhỏ hơn 0)" });
+        }
+        if (old_price !== undefined && Number(old_price) < 0) {
+            return res.status(400).json({ success: false, message: "Giá sản phẩm không hợp lệ (không được nhỏ hơn 0)" });
+        }
+
+        if (parsedSizes && parsedSizes.length > 0) {
+            for (const s of parsedSizes) {
+                if (Number(s.new_price) < 0 || Number(s.old_price) < 0) {
+                    return res.status(400).json({ success: false, message: "Giá kích thước sản phẩm không hợp lệ" });
+                }
+            }
+        }
+
+        if (stock !== undefined) {
+            const stockNum = Number(stock);
+            if (stockNum < 0) {
+                return res.status(400).json({ success: false, message: "Số lượng tồn kho không được âm" });
+            }
+            product.stock = stockNum;
+        }
+
         product.name = name || product.name;
         product.description = description !== undefined ? description : product.description;
         product.category = category || product.category;
@@ -173,7 +215,9 @@ exports.updateProduct = async (req, res) => {
         product.detail_category = detail_category !== undefined ? detail_category : product.detail_category;
         product.image = imageUrl;
         product.images = imagesUrls;
-        product.sizes = parsedSizes;
+        if (sizes !== undefined) {
+            product.sizes = parsedSizes;
+        }
         
         // If size prices exist, set global price dynamically as first size's price
         product.new_price = new_price !== undefined ? Number(new_price) : (parsedSizes.length > 0 ? parsedSizes[0].new_price : product.new_price);

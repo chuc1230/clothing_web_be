@@ -19,7 +19,7 @@ const ProductSchema = new mongoose.Schema({
     colors: [{ type: String }], // Ví dụ: ["Red", "Black"]
     new_price: { type: Number, required: true, min: 0 },
     old_price: { type: Number, required: true, min: 0 },
-    stock: { type: Number, default: 0 }, // Quản lý số lượng tồn kho
+    stock: { type: Number, default: 0, min: 0 }, // Quản lý số lượng tồn kho
     available: { type: Boolean, default: true },
     featured: { type: Boolean, default: false }, // Sản phẩm nổi bật
     date: { type: Date, default: Date.now },
