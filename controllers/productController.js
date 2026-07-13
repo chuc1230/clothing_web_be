@@ -1,4 +1,5 @@
 const Product = require("../models/Product");
+const Order = require("../models/Order");
 const cloudinary = require("cloudinary").v2;
 const logger = require('../utils/logger');
 // Add single product
@@ -27,6 +28,15 @@ exports.addProduct = async (req, res) => {
                 sizes = typeof req.body.sizes === 'string' ? JSON.parse(req.body.sizes) : req.body.sizes;
             } catch (err) {
                 console.error("Error parsing sizes:", err);
+            }
+        }
+
+        let colors = [];
+        if (req.body.colors) {
+            try {
+                colors = typeof req.body.colors === 'string' ? JSON.parse(req.body.colors) : req.body.colors;
+            } catch (err) {
+                console.error("Error parsing colors:", err);
             }
         }
 
@@ -60,6 +70,8 @@ exports.addProduct = async (req, res) => {
             new_price: new_price,
             old_price: old_price,
             sizes: sizes,
+            colors: colors,
+            season: req.body.season || 'Quanh năm',
             stock: stock,
         });
         await product.save();
@@ -105,8 +117,7 @@ exports.getAllProducts = async (req, res) => {
 // Get new collection
 exports.getNewCollection = async (req, res) => {
     try {
-        let products = await Product.find({});
-        let newcollection = products.slice(1).slice(-8);
+        let newcollection = await Product.find({}).sort({ date: -1 }).limit(8);
         console.log("NewCollection Fetched");
         res.send(newcollection);
     } catch (error) {
@@ -117,11 +128,56 @@ exports.getNewCollection = async (req, res) => {
 // Get popular in women
 exports.getPopularInWomen = async (req, res) => {
     try {
-        let products = await Product.find({ category: "women" });
-        let popular_in_women = products.slice(0, 4);
-        console.log("Popular in women fetched");
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+        // Find orders in the last 30 days that are not cancelled/denied
+        const orders = await Order.find({
+            orderDate: { $gte: thirtyDaysAgo },
+            status: { $nin: ["Cancelled", "Đã hủy"] }
+        });
+
+        // Map and sum sold quantities per product ID
+        const productSales = {};
+        orders.forEach(order => {
+            if (order.items && Array.isArray(order.items)) {
+                order.items.forEach(item => {
+                    if (item.productId) {
+                        const prodIdStr = item.productId.toString();
+                        productSales[prodIdStr] = (productSales[prodIdStr] || 0) + (item.quantity || 1);
+                    }
+                });
+            }
+        });
+
+        // Get all women products
+        const womenProducts = await Product.find({ category: "women" });
+
+        // Map women products with their sale count
+        const womenProductsWithSales = womenProducts.map(product => {
+            const saleCount = productSales[product._id.toString()] || 0;
+            return {
+                product,
+                saleCount
+            };
+        });
+
+        // Sort by saleCount descending
+        womenProductsWithSales.sort((a, b) => {
+            if (b.saleCount !== a.saleCount) {
+                return b.saleCount - a.saleCount;
+            }
+            // Fallback: sort by date created (newest first)
+            return new Date(b.product.date) - new Date(a.product.date);
+        });
+
+        // Take top 5 products
+        const popular_in_women = womenProductsWithSales.slice(0, 5).map(item => item.product);
+
+        console.log("Popular in women (top 5 in last 30 days) fetched");
         res.send(popular_in_women);
     } catch (error) {
+        console.error("Error in getPopularInWomen:", error);
         res.status(500).json({ success: false, message: "Failed to fetch popular in women" });
     }
 };
@@ -152,7 +208,7 @@ exports.addProductReview = async (req, res) => {
 // Update product
 exports.updateProduct = async (req, res) => {
     try {
-        const { id, name, description, category, subcategory, detail_category, new_price, old_price, sizes, stock } = req.body;
+        const { id, name, description, category, subcategory, detail_category, new_price, old_price, sizes, stock, season, colors, existingImages } = req.body;
         
         const product = await Product.findOne({ id: Number(id) });
         if (!product) {
@@ -166,10 +222,20 @@ exports.updateProduct = async (req, res) => {
             imageUrl = result.secure_url;
         }
 
-        // Upload accompanying images if new ones provided
-        let imagesUrls = product.images;
+        // Process accompanying images (merge existing ones with new uploads)
+        let imagesUrls = [];
+        if (existingImages !== undefined) {
+            try {
+                imagesUrls = typeof existingImages === 'string' ? JSON.parse(existingImages) : existingImages;
+            } catch (err) {
+                console.error("Error parsing existingImages:", err);
+                imagesUrls = product.images || [];
+            }
+        } else {
+            imagesUrls = product.images || [];
+        }
+
         if (req.files && req.files['images'] && req.files['images'].length > 0) {
-            imagesUrls = [];
             for (const file of req.files['images']) {
                 const result = await cloudinary.uploader.upload(file.path);
                 imagesUrls.push(result.secure_url);
@@ -182,6 +248,15 @@ exports.updateProduct = async (req, res) => {
                 parsedSizes = typeof sizes === 'string' ? JSON.parse(sizes) : sizes;
             } catch (err) {
                 console.error("Error parsing sizes:", err);
+            }
+        }
+
+        let parsedColors = [];
+        if (colors !== undefined) {
+            try {
+                parsedColors = typeof colors === 'string' ? JSON.parse(colors) : colors;
+            } catch (err) {
+                console.error("Error parsing colors:", err);
             }
         }
 
@@ -217,6 +292,12 @@ exports.updateProduct = async (req, res) => {
         product.images = imagesUrls;
         if (sizes !== undefined) {
             product.sizes = parsedSizes;
+        }
+        if (colors !== undefined) {
+            product.colors = parsedColors;
+        }
+        if (season !== undefined) {
+            product.season = season;
         }
         
         // If size prices exist, set global price dynamically as first size's price

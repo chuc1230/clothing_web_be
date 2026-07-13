@@ -3,6 +3,11 @@ const jwt = require("jsonwebtoken");
 const Order = require("../models/Order");
 const Product = require("../models/Product");
 
+const JWT_SECRET = process.env.JWT_SECRET || 'secret_ecom';
+
+const getSuperAdminEmail = () => (process.env.SUPER_ADMIN_EMAIL || "").replace(/^["']|["']$/g, "");
+const getSuperAdminPassword = () => (process.env.SUPER_ADMIN_PASSWORD || "").replace(/^["']|["']$/g, "");
+
 // Signup
 exports.signup = async (req, res) => {
     try {
@@ -33,7 +38,7 @@ exports.signup = async (req, res) => {
             listOrders: [],
         });
         await user.save();
-        const token = jwt.sign({ user: { id: user.id, role: user.role || 'user' } }, 'secret_ecom');
+        const token = jwt.sign({ user: { id: user.id, role: user.role || 'user' } }, JWT_SECRET);
         res.json({ success: true, token });
     } catch (error) {
         res.status(500).json({ success: false, message: "Signup failed", error: error.message });
@@ -43,9 +48,11 @@ exports.signup = async (req, res) => {
 // Login
 exports.login = async (req, res) => {
     try {
-        if (process.env.SUPER_ADMIN_EMAIL && process.env.SUPER_ADMIN_PASSWORD &&
-            req.body.email === process.env.SUPER_ADMIN_EMAIL && req.body.password === process.env.SUPER_ADMIN_PASSWORD) {
-            const token = jwt.sign({ user: { id: "super_admin_id", role: "super_admin" } }, 'secret_ecom');
+        const superAdminEmail = getSuperAdminEmail();
+        const superAdminPassword = getSuperAdminPassword();
+        if (superAdminEmail && superAdminPassword &&
+            req.body.email === superAdminEmail && req.body.password === superAdminPassword) {
+            const token = jwt.sign({ user: { id: "super_admin_id", role: "super_admin" } }, JWT_SECRET);
             return res.json({ success: true, token });
         }
 
@@ -53,7 +60,7 @@ exports.login = async (req, res) => {
         if (user) {
             const passCompare = req.body.password === user.password;
             if (passCompare) {
-                const token = jwt.sign({ user: { id: user.id, role: user.role || 'user' } }, 'secret_ecom');
+                const token = jwt.sign({ user: { id: user.id, role: user.role || 'user' } }, JWT_SECRET);
                 res.json({ success: true, token });
             } else {
                 res.json({ success: false, errors: "Wrong Password" });
@@ -63,6 +70,44 @@ exports.login = async (req, res) => {
         }
     } catch (error) {
         res.status(500).json({ success: false, errors: "Login failed due to server error", error: error.message });
+    }
+};
+
+// Admin Login (Separate function for admin)
+exports.adminLogin = async (req, res) => {
+    try {
+        const { email, password } = req.body;
+        if (!email || !password) {
+            return res.status(400).json({ success: false, errors: "Vui lòng nhập đầy đủ email và mật khẩu" });
+        }
+
+        // Check super admin defined in env
+        const superAdminEmail = getSuperAdminEmail();
+        const superAdminPassword = getSuperAdminPassword();
+        if (superAdminEmail && superAdminPassword &&
+            email === superAdminEmail && password === superAdminPassword) {
+            const token = jwt.sign({ user: { id: "super_admin_id", role: "super_admin" } }, JWT_SECRET);
+            return res.json({ success: true, token });
+        }
+
+        let user = await Users.findOne({ email });
+        if (user) {
+            const passCompare = password === user.password;
+            if (passCompare) {
+                if (user.role === "admin" || user.role === "super_admin") {
+                    const token = jwt.sign({ user: { id: user.id, role: user.role } }, JWT_SECRET);
+                    res.json({ success: true, token });
+                } else {
+                    res.status(403).json({ success: false, errors: "Tài khoản của bạn không có quyền truy cập trang quản trị!" });
+                }
+            } else {
+                res.json({ success: false, errors: "Mật khẩu không chính xác" });
+            }
+        } else {
+            res.json({ success: false, errors: "Email không chính xác" });
+        }
+    } catch (error) {
+        res.status(500).json({ success: false, errors: "Đăng nhập thất bại do lỗi hệ thống", error: error.message });
     }
 };
 
@@ -205,14 +250,27 @@ exports.addOrder = async (req, res) => {
 
         // Save order to Order collection/table
         const items = [];
-        for (const [productId, quantity] of Object.entries(cart || {})) {
-            const product = await Product.findOne({ id: Number(productId) });
+        for (const [key, quantity] of Object.entries(cart || {})) {
+            const parts = key.split('_');
+            const productId = Number(parts[0]);
+            const size = parts[1] || "";
+            const color = parts[2] || "";
+
+            const product = await Product.findOne({ id: productId });
             if (product) {
+                let price = product.new_price;
+                if (size && product.sizes) {
+                    const matchedSize = product.sizes.find(s => s.size === size);
+                    if (matchedSize) {
+                        price = matchedSize.new_price;
+                    }
+                }
                 items.push({
                     productId: product._id,
-                    name: product.name,
-                    price: product.new_price,
-                    quantity: quantity
+                    name: color ? `${product.name} - ${color}` : product.name,
+                    price: price,
+                    quantity: quantity,
+                    size: size
                 });
             }
         }
@@ -329,7 +387,7 @@ exports.getUserProfile = async (req, res) => {
                 success: true,
                 user: {
                     name: "Super Admin",
-                    email: process.env.SUPER_ADMIN_EMAIL || "abc123@example.com",
+                    email: getSuperAdminEmail() || "abc123@example.com",
                     role: "super_admin",
                     phoneNumber: "",
                     address: { street: "", city: "", state: "" }
@@ -409,5 +467,70 @@ exports.cancelOrder = async (req, res) => {
         res.json({ success: true, message: "Đơn hàng đã được hủy thành công!", order });
     } catch (error) {
         res.status(500).json({ success: false, message: "Lỗi hủy đơn hàng", error: error.message });
+    }
+};
+
+exports.getAdminStats = async (req, res) => {
+    try {
+        const now = new Date();
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+        const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+
+        // Find all orders in the current month
+        const orders = await Order.find({
+            orderDate: { $gte: startOfMonth, $lte: endOfMonth }
+        });
+
+        // 1. Total orders in current month (excluding cancelled ones)
+        const activeOrders = orders.filter(order => order.status !== "Cancelled" && order.status !== "Đã hủy");
+        const totalOrders = activeOrders.length;
+
+        // 2. Total revenue: only orders with status "Đã thanh toán"
+        let totalRevenue = 0;
+        orders.forEach(order => {
+            if (order.status === "Đã thanh toán") {
+                totalRevenue += order.totalPrice || 0;
+            }
+        });
+
+        // 3. Top 10 best selling products in current month (from active orders)
+        const productSales = {};
+        activeOrders.forEach(order => {
+            if (order.items && Array.isArray(order.items)) {
+                order.items.forEach(item => {
+                    const idStr = item.productId ? item.productId.toString() : null;
+                    if (idStr) {
+                        if (!productSales[idStr]) {
+                            productSales[idStr] = {
+                                name: item.name || "Sản phẩm không tên",
+                                price: item.price || 0,
+                                quantity: 0
+                            };
+                        }
+                        productSales[idStr].quantity += item.quantity || 1;
+                    }
+                });
+            }
+        });
+
+        const sortedSales = Object.entries(productSales).map(([id, info]) => ({
+            productId: id,
+            name: info.name,
+            price: info.price,
+            quantity: info.quantity
+        }));
+
+        sortedSales.sort((a, b) => b.quantity - a.quantity);
+        const topProducts = sortedSales.slice(0, 10);
+
+        res.json({
+            success: true,
+            totalOrders,
+            totalRevenue,
+            topProducts
+        });
+    } catch (error) {
+        console.error("Error in getAdminStats:", error);
+        res.status(500).json({ success: false, message: "Lỗi lấy thống kê doanh thu", error: error.message });
     }
 };

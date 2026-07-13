@@ -6,6 +6,7 @@ const fetchUser = require("../middleware/auth");
 // Auth
 router.post('/signup', userController.signup);
 router.post('/login', userController.login);
+router.post('/admin/login', userController.adminLogin);
 
 // Profile
 router.get('/api/users/profile', fetchUser, userController.getUserProfile);
@@ -29,5 +30,6 @@ router.post('/cancelOrder', fetchUser, userController.cancelOrder);
 router.get('/orderItems', fetchUser, userController.getOrderItems);
 router.get('/admin/allorders', userController.getAllOrdersAdmin);
 router.post('/admin/updateOrderStatus', userController.updateUserOrderStatus);
+router.get('/admin/stats', userController.getAdminStats);
 
 module.exports = router;

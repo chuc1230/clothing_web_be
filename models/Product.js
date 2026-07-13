@@ -16,7 +16,17 @@ const ProductSchema = new mongoose.Schema({
             old_price: { type: Number, required: true, min: 0 }
         }
     ],
-    colors: [{ type: String }], // Ví dụ: ["Red", "Black"]
+    colors: [
+        {
+            name: { type: String, required: true },
+            image: { type: String, required: true }
+        }
+    ],
+    season: {
+        type: String,
+        enum: ['Xuân/Hè', 'Thu/Đông', 'Quanh năm'],
+        default: 'Quanh năm'
+    },
     new_price: { type: Number, required: true, min: 0 },
     old_price: { type: Number, required: true, min: 0 },
     stock: { type: Number, default: 0, min: 0 }, // Quản lý số lượng tồn kho
